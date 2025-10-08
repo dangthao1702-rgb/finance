@@ -9,7 +9,11 @@ st.set_page_config(
     layout="wide"
 )
 
-st.title("Ứng dụng Phân Tích Báo Cáo Tài Chính 📊")
+# Thay thế st.title bằng st.markdown để tùy chỉnh kiểu chữ, cỡ chữ và màu sắc
+st.markdown(
+    "<h1 style='text-align: center; color: #8B0000; font-size: 24px;'>ỨNG DỤNG PHÂN TÍCH BÁO CÁO TÀI CHÍNH 📊</h1>",
+    unsafe_allow_html=True
+)
 
 # --- Khởi tạo Session State cho Chat và Dữ liệu ---
 if "messages" not in st.session_state:
