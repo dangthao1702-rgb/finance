@@ -230,29 +230,46 @@ if prompt := st.chat_input("Hỏi Gemini AI về báo cáo tài chính..."):
                 st.session_state.df_processed.to_markdown(index=False)
             )
 
-        # Chuẩn bị contents cho API: Chuyển đổi định dạng Streamlit sang Gemini
-        full_contents = []
-        
-        # Thêm ngữ cảnh vào đầu cuộc hội thoại (vào System Instruction)
-        system_instruction = (
+        # Chuẩn bị System Instruction
+        system_instruction_text = (
             "Bạn là một chuyên gia phân tích tài chính chuyên nghiệp, thân thiện và hữu ích. "
             "Hãy trả lời các câu hỏi dựa trên kiến thức tài chính. "
             f"Ngữ cảnh dữ liệu tài chính hiện tại (nếu có): \n {context_data}"
         )
         
-        # Thêm lịch sử hội thoại
-        for message in st.session_state.messages:
+        # Chuẩn bị contents cho API: Thêm System Instruction (Ngữ cảnh) vào đầu list contents
+        full_contents = []
+        # Thêm System Instruction vào đầu danh sách, đóng vai trò là bối cảnh chung
+        full_contents.append({
+            "role": "user", 
+            "parts": [{"text": system_instruction_text}]
+        })
+        # Thêm tin nhắn từ trợ lý (nếu có) để đặt ngữ cảnh hội thoại
+        if st.session_state.messages and st.session_state.messages[0]["role"] == "assistant":
+             # Lấy lời chào ban đầu của assistant để làm bối cảnh
+            full_contents.append({
+                "role": "model", 
+                "parts": [{"text": st.session_state.messages[0]["content"]}]
+            })
+            # Bắt đầu thêm lịch sử chat từ tin nhắn thứ hai trở đi
+            chat_history = st.session_state.messages[1:]
+        else:
+            chat_history = st.session_state.messages
+            
+        # Thêm lịch sử hội thoại còn lại
+        for message in chat_history:
             # Ánh xạ role của Streamlit sang role của Gemini
             role = "model" if message["role"] == "assistant" else "user"
-            full_contents.append({
-                "role": role,
-                "parts": [{"text": message["content"]}]
-            })
-
-        # Xóa tin nhắn đầu tiên của trợ lý nếu có quá nhiều tin nhắn để giữ lịch sử chat ngắn hơn
-        # (Lưu ý: System Instruction đã chứa lời chào ban đầu)
-        if len(full_contents) > 1 and full_contents[0]["role"] == "model" and full_contents[0]["parts"][0]["text"].startswith("Xin chào!"):
-            full_contents.pop(0)
+            # Chỉ thêm tin nhắn nếu nó không phải là system instruction (đã thêm ở trên)
+            if message["content"] != system_instruction_text:
+                full_contents.append({
+                    "role": role,
+                    "parts": [{"text": message["content"]}]
+                })
+        # Đảm bảo tin nhắn cuối cùng là của người dùng
+        # Nếu full_contents hiện tại không có tin nhắn người dùng cuối cùng (vì đã thêm vào st.session_state.messages ở trên)
+        if full_contents[-1]["role"] != "user":
+            full_contents.append({"role": "user", "parts": [{"text": prompt}]})
 
 
         # 3. Gọi Gemini và nhận phản hồi
@@ -260,10 +277,12 @@ if prompt := st.chat_input("Hỏi Gemini AI về báo cáo tài chính..."):
             with st.spinner("Đang nghĩ..."):
                 try:
                     client = genai.Client(api_key=api_key)
+                    # Gỡ bỏ tham số system_instruction vì nó không được hỗ trợ trong phiên bản này của generate_content khi dùng contents array.
+                    # System Instruction đã được nhúng vào contents array.
                     response = client.models.generate_content(
                         model='gemini-2.5-flash',
                         contents=full_contents,
-                        system_instruction=system_instruction
+                        # system_instruction=system_instruction_text # Lỗi ở đây, đã được loại bỏ
                     )
                     ai_response = response.text
                 
@@ -274,4 +293,5 @@ if prompt := st.chat_input("Hỏi Gemini AI về báo cáo tài chính..."):
 
             # 4. Hiển thị phản hồi và thêm vào lịch sử
             st.markdown(ai_response)
+            # Thêm phản hồi của AI vào lịch sử chat
             st.session_state.messages.append({"role": "assistant", "content": ai_response})
